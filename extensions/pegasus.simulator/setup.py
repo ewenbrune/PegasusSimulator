@@ -63,13 +63,18 @@ class PatchIsaacSimKitApp(egg_info):
     def run(self):
         egg_info.run(self)
 
-        # Get the ISAACSIM_PATH environment variable
-        isaacsim_path = os.environ.get("ISAACSIM_PATH")
+        # Get the Isaac Sim installation path from environment variable
+        # Isaac Sim 6.2 uses ISAAC_HOME, older versions used ISAACSIM_PATH
+        isaacsim_path = os.environ.get("ISAAC_HOME") or os.environ.get("ISAACSIM_PATH")
 
-        # Check if the ISAACSIM_PATH environment variable is set
+        # Check if the environment variable is set
         if not isaacsim_path:
             # If the environment variable is not set, raise an error
-            raise RuntimeError("ISAACSIM_PATH is not set! Please set it to the path of your Isaac Sim installation. Read the installation instructions at https://pegasussimulator.github.io/PegasusSimulator/source/setup/installation.html")
+            raise RuntimeError(
+                "ISAAC_HOME is not set! Please set it to the path of your Isaac Sim 6.2 installation. "
+                "Read the installation instructions at "
+                "https://pegasussimulator.github.io/PegasusSimulator/source/setup/installation.html"
+            )
 
         # Check if the isaacsim.exp.base.kit file contains the "isaacsim.replicator.agent.core" extension
         isaac_sim_kit_app = os.path.join(isaacsim_path, "apps", "isaacsim.exp.base.kit")

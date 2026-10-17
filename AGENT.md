@@ -511,6 +511,22 @@
 - [x] Step 9: Update `extension.py` (no changes needed — uses only active `omni.*` APIs)
 - [ ] Step 10: Testing and validation
 
+## Windows 11 Support
+
+The project now supports Windows 11 with the following changes:
+
+1. **`tools/packman/bootstrap/configure.bat`** — Updated Python version from 3.7.9 to 3.12.13 (matching Isaac Sim 6.2's bundled Python)
+2. **`setup.py`** — Now checks for `ISAAC_HOME` env var (used by Isaac Sim 6.2) with fallback to `ISAACSIM_PATH`
+3. **`run_simulation.bat`** — New Windows launcher script that:
+   - Validates `ISAAC_HOME` is set
+   - Registers the extension with Isaac Sim
+   - Launches Isaac Sim with the Pegasus extension enabled
+
+### Windows 11 Prerequisites
+- Isaac Sim 6.2 installed via Omniverse Launcher
+- `ISAAC_HOME` environment variable set to the Isaac Sim 6.2 install path
+- NVIDIA GPU with latest drivers
+
 ## Notes for Agents
 
 1. **Always check the Isaac Sim 6.2 source at `../IsaacSim`** when unsure about an API:
