@@ -19,7 +19,8 @@ simulation_app = SimulationApp({"headless": False})
 # The actual script should start here
 # -----------------------------------
 import omni.timeline
-from omni.isaac.core.world import World
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.experimental.utils import app as app_utils
 
 # Import the Pegasus API for simulating drones
 from pegasus.simulator.params import ROBOTS, SIMULATION_ENVIRONMENTS
@@ -47,9 +48,8 @@ class PegasusApp:
         # Start the Pegasus Interface
         self.pg = PegasusInterface()
 
-        # Acquire the World, .i.e, the singleton that controls that is a one stop shop for setting up physics, 
-        # spawning asset primitives, etc.
-        self.pg._world = World(**self.pg._world_settings)
+        # Initialize the simulation
+        self.pg.initialize_world()
         self.world = self.pg.world
 
         # Launch one of the worlds provided by NVIDIA
@@ -60,7 +60,8 @@ class PegasusApp:
             self.vehicle_factory(i, gap_x_axis=1.0)
 
         # Reset the simulation environment so that all articulations (aka robots) are initialized
-        self.world.reset()
+        SimulationManager.invalidate_physics()
+        SimulationManager.initialize_physics()
 
         # Auxiliar variable for the timeline callback example
         self.stop_sim = False
@@ -75,7 +76,7 @@ class PegasusApp:
         # Create the vehicle
         # Try to spawn the selected robot in the world to the specified namespace
         config_multirotor = MultirotorConfig()
-        
+
         # Create the multirotor configuration
         backend_config = ArduPilotMavlinkBackendConfig({
             "vehicle_id": vehicle_id,
@@ -84,8 +85,8 @@ class PegasusApp:
             "ardupilot_vehicle_model": "gazebo-iris"
         })
         config_multirotor.backends = [
-            ArduPilotMavlinkBackend(config=backend_config), 
-            ROS2Backend(vehicle_id=vehicle_id, 
+            ArduPilotMavlinkBackend(config=backend_config),
+            ROS2Backend(vehicle_id=vehicle_id,
                 config={
                     "namespace": f'drone', # vehicle_id is added here by default
                     "pub_sensors": True,
@@ -96,7 +97,7 @@ class PegasusApp:
                 }
             )
         ]
-        
+
         Multirotor(
             f"/World/drone{vehicle_id}",
             ROBOTS['Iris'],
@@ -118,14 +119,16 @@ class PegasusApp:
         while simulation_app.is_running() and not self.stop_sim:
 
             # Update the UI of the app and perform the physics step
-            self.world.step(render=True)
-        
+            SimulationManager.step()
+            app_utils.update_app()
+
         # Cleanup and stop
         carb.log_warn("PegasusApp Simulation App is closing.")
         self.timeline.stop()
         simulation_app.close()
 
 def main():
+
     # Instantiate the template app
     pg_app = PegasusApp()
 

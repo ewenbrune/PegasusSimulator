@@ -2,8 +2,8 @@
 """
 | File: 3_ros2_single_vehicle.py
 | Author: Marcelo Jacinto (marcelo.jacinto@tecnico.ulisboa.pt)
-| License: BSD-3-Clause. Copyright (c) 2024, Marcelo Jacinto. All rights reserved.
-| Description: This files serves as an example on how to build an app that makes use of the Pegasus API to run a 
+| License: BSD-3-Clause. Copyright (c) 2023, Marcelo Jacinto. All rights reserved.
+| Description: This files serves as an example on how to build an app that makes use of the Pegasus API to run a
 simulation with a single vehicle, controlled using the ROS2 backend system. NOTE: this ROS2 interface only works on Ubuntu 22.04LTS and ROS2 Humble
 """
 
@@ -20,9 +20,10 @@ simulation_app = SimulationApp({"headless": False})
 # The actual script should start here
 # -----------------------------------
 import omni.timeline
-from omni.isaac.core.world import World
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.experimental.utils import app as app_utils
+from isaacsim.core.experimental.utils.app import enable_extension
 
-from isaacsim.core.utils.extensions import enable_extension
 enable_extension("isaacsim.ros2.bridge")
 
 # Import the Pegasus API for simulating drones
@@ -51,9 +52,8 @@ class PegasusApp:
         # Start the Pegasus Interface
         self.pg = PegasusInterface()
 
-        # Acquire the World, .i.e, the singleton that controls that is a one stop shop for setting up physics, 
-        # spawning asset primitives, etc.
-        self.pg._world = World(**self.pg._world_settings)
+        # Initialize the simulation
+        self.pg.initialize_world()
         self.world = self.pg.world
 
         # Launch one of the worlds provided by NVIDIA
@@ -72,7 +72,7 @@ class PegasusApp:
             )
         ]
         config_multirotor.graphical_sensors = [MonocularCamera("camera", config={"update_rate": 60.0})]
-        
+
         Multirotor(
             "/World/quadrotor",
             ROBOTS['Iris'],
@@ -83,7 +83,8 @@ class PegasusApp:
         )
 
         # Reset the simulation environment so that all articulations (aka robots) are initialized
-        self.world.reset()
+        SimulationManager.invalidate_physics()
+        SimulationManager.initialize_physics()
 
         # Auxiliar variable for the timeline callback example
         self.stop_sim = False
@@ -100,8 +101,9 @@ class PegasusApp:
         while simulation_app.is_running() and not self.stop_sim:
 
             # Update the UI of the app and perform the physics step
-            self.world.step(render=True)
-        
+            SimulationManager.step()
+            app_utils.update_app()
+
         # Cleanup and stop
         carb.log_warn("PegasusApp Simulation App is closing.")
         self.timeline.stop()

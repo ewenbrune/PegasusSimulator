@@ -10,7 +10,8 @@ from pegasus.simulator.logic.state import State
 from pegasus.simulator.logic.graphical_sensors import GraphicalSensor
 from pegasus.simulator.logic.interface.pegasus_interface import PegasusInterface
 
-from isaacsim.sensors.camera.camera import Camera
+from isaacsim.sensors.experimental.rtx import CameraSensor
+from isaacsim.core.experimental.utils.stage import get_current_stage
 from omni.usd import get_stage_next_free_path
 
 # Auxiliary scipy and numpy modules
@@ -26,9 +27,6 @@ class MonocularCamera(GraphicalSensor):
     def __init__(self, camera_name, config={}):
         """
         Initialize the MonocularCamera class
-        
-        Check the oficial documentation for the Camera class in Isaac Sim: 
-        https://docs.omniverse.nvidia.com/isaacsim/latest/features/sensors_simulation/isaac_sim_sensors_camera.html#isaac-sim-sensors-camera
 
         Args:
             config (dict): A Dictionary that contains all the parameters for configuring the MonocularCamera - it can be empty or only have some of the parameters used by the MonocularCamera.
@@ -42,13 +40,13 @@ class MonocularCamera(GraphicalSensor):
             >>> "resolution": (1920, 1200),
             >>> "clipping_range": (0.05, 100.0),
             >>> "frequency": 30,
-            >>> "intrinsics": None),
+            >>> "intrinsics": None,
             >>> "distortion_coefficients": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])}
         """
 
         # Initialize the Super class "object" attributes
-        super().__init__(sensor_type="MonocularCamera", update_rate=config.get("frequency", 30.0))        
-        
+        super().__init__(sensor_type="MonocularCamera", update_rate=config.get("frequency", 30.0))
+
         # Setup the name of the camera primitive path
         self._camera_name = camera_name
         self._stage_prim_path = ""
@@ -87,41 +85,36 @@ class MonocularCamera(GraphicalSensor):
 
 
     def initialize(self, vehicle):
-        
+
         # Initialize the Super class "object" attributes
         super().initialize(vehicle)
 
         # Get the complete stage prefix for the camera
-        self._stage_prim_path = get_stage_next_free_path(PegasusInterface().world.stage, self._vehicle.prim_path + "/body/" + self._camera_name, False)
+        self._stage_prim_path = get_stage_next_free_path(get_current_stage(), self._vehicle.prim_path + "/body/" + self._camera_name, False)
 
         # Get the camera name that was actually created (and update the camera name)
         self._camera_name = self._stage_prim_path.rpartition("/")[-1]
 
-        # Create the camera object attached to the rigid body vehicle
-        self._camera = Camera(
-            prim_path=self._stage_prim_path,
-            frequency=self._frequency,
-            resolution=self._resolution)
-        
-        # Set the camera position locally with respect to the drone
-        self._camera.set_local_pose(np.array(self._position), Rotation.from_euler("ZYX", self._orientation, degrees=True).as_quat())
-        
-    def start(self):
-
-        # Start the camera
-        self._camera.initialize()
-
-        # Set the correct properties of the camera (this must be done after the camera object is initialized)
-        self._camera.set_lens_distortion_model("OmniLensDistortionOpenCvPinholeAPI")
-        self._camera.set_resolution(self._resolution, maintain_square_pixels=True)
-        self._camera.set_clipping_range(*self._clipping_range)
-        self._camera.set_opencv_pinhole_properties(cx=self.cx, cy=self.cy, fx=self.fx, fy=self.fy)
-        self._camera.set_frequency(self._frequency)
-
-        # Check if depth is enabled, if so, set the depth properties
+        # Build annotators list
+        annotators = ["rgb"]
         if self._depth:
-            self._camera.add_distance_to_image_plane_to_frame()
+            annotators.append("distance_to_image_plane")
 
+        # Create the camera sensor using the new experimental RTX API
+        # Note: resolution follows OpenCV/NumPy convention (height, width)
+        self._camera = CameraSensor(
+            path=self._stage_prim_path,
+            resolution=(self._resolution[1], self._resolution[0]),
+            annotators=annotators,
+        )
+
+        # Set the camera position locally with respect to the drone
+        self._camera.authoring_object.set_local_poses(
+            translations=[self._position],
+            orientations=[Rotation.from_euler("ZYX", self._orientation, degrees=True).as_quat().tolist()]
+        )
+
+    def start(self):
         # Signal that the camera is fully set
         self._camera_full_set = True
 
@@ -171,8 +164,9 @@ class MonocularCamera(GraphicalSensor):
                 self._state["depth"] = True
 
             # To actually get the image data from the camera, you can use:
-            #self._state["camera"].get_rgb_image()  # For RGB image
-            
+            # self._camera.get_data("rgb")  # For RGB image
+            # self._camera.get_data("distance_to_image_plane")  # For depth
+
         # If something goes wrong during the data acquisition, just return None
         except:
             self._state = None

@@ -3,7 +3,7 @@
 | File: python_control_backend.py
 | Author: Marcelo Jacinto and Joao Pinto (marcelo.jacinto@tecnico.ulisboa.pt, joao.s.pinto@tecnico.ulisboa.pt)
 | License: BSD-3-Clause. Copyright (c) 2023, Marcelo Jacinto. All rights reserved.
-| Description: This files serves as an example on how to use the control backends API to create a custom controller 
+| Description: This files serves as an example on how to use the control backends API to create a custom controller
 for the vehicle from scratch and use it to perform a simulation, without using PX4 nor ROS. NOTE: to see the HDR
 environment as shown in the video and paper, you must have opened ISAAC SIM at least once thorugh the OMNIVERSE APP,
 otherwise, the path to the HDR environment is not recognized.
@@ -21,10 +21,9 @@ simulation_app = SimulationApp({"headless": False})
 # The actual script should start here
 # -----------------------------------
 import omni.timeline
-from omni.isaac.core.world import World
-
-# Used for adding extra lights to the environment
-import isaacsim.core.utils.prims as prim_utils
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.experimental.utils import app as app_utils
+from isaacsim.core.experimental.utils import stage as stage_utils
 
 import omni.kit.commands
 from pxr import Sdf
@@ -65,22 +64,19 @@ class PegasusApp:
         # Start the Pegasus Interface
         self.pg = PegasusInterface()
 
-        # Acquire the World, .i.e, the singleton that controls that is a one stop shop for setting up physics, 
-        # spawning asset primitives, etc.
+        # Initialize the simulation
         self.pg._world_settings = {"physics_dt": 1.0 / 500.0, "stage_units_in_meters": 1.0, "rendering_dt": 1.0 / 60.0}
-        self.pg._world = World(**self.pg._world_settings)
+        self.pg.initialize_world()
         self.world = self.pg.world
 
-        prim_utils.create_prim(
+        stage_utils.define_prim(
             "/World/Light/DomeLight",
             "DomeLight",
-            position=np.array([1.0, 1.0, 1.0]),
-            attributes={
-                "inputs:intensity": 5e3,
-                "inputs:color": (1.0, 1.0, 1.0),
-                "inputs:texture:file": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/NVIDIA/Assets/Skies/Indoor/ZetoCGcom_ExhibitionHall_Interior1.hdr"
-            }
         )
+        light_prim = stage_utils.get_prim_at_path("/World/Light/DomeLight")
+        light_prim.GetAttribute("inputs:intensity").Set(5e3)
+        light_prim.GetAttribute("inputs:color").Set((1.0, 1.0, 1.0))
+        light_prim.GetAttribute("inputs:texture:file").Set("https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/NVIDIA/Assets/Skies/Indoor/ZetoCGcom_ExhibitionHall_Interior1.hdr")
 
         # Get the current directory used to read trajectories and save results
         self.curr_dir = str(Path(os.path.dirname(os.path.realpath(__file__))).resolve())
@@ -140,7 +136,8 @@ class PegasusApp:
         draw.draw_lines_spline(point_list_2, (255/255, 0, 0, 1), 5, False)
 
         # Reset the world
-        self.world.reset()
+        SimulationManager.invalidate_physics()
+        SimulationManager.initialize_physics()
 
     def run(self):
         """
@@ -154,8 +151,9 @@ class PegasusApp:
         while simulation_app.is_running():
 
             # Update the UI of the app and perform the physics step
-            self.world.step(render=True)
-        
+            SimulationManager.step()
+            app_utils.update_app()
+
         # Cleanup and stop
         carb.log_warn("PegasusApp Simulation App is closing.")
         self.timeline.stop()

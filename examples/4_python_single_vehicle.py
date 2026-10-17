@@ -3,7 +3,7 @@
 | File: 4_python_single_vehicle.py
 | Author: Marcelo Jacinto and Joao Pinto (marcelo.jacinto@tecnico.ulisboa.pt, joao.s.pinto@tecnico.ulisboa.pt)
 | License: BSD-3-Clause. Copyright (c) 2023, Marcelo Jacinto. All rights reserved.
-| Description: This files serves as an example on how to use the control backends API to create a custom controller 
+| Description: This files serves as an example on how to use the control backends API to create a custom controller
 for the vehicle from scratch and use it to perform a simulation, without using PX4 nor ROS.
 """
 
@@ -20,7 +20,8 @@ simulation_app = SimulationApp({"headless": False})
 # The actual script should start here
 # -----------------------------------
 import omni.timeline
-from omni.isaac.core.world import World
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.experimental.utils import app as app_utils
 
 # Import the Pegasus API for simulating drones
 from pegasus.simulator.params import ROBOTS, SIMULATION_ENVIRONMENTS
@@ -55,9 +56,8 @@ class PegasusApp:
         # Start the Pegasus Interface
         self.pg = PegasusInterface()
 
-        # Acquire the World, .i.e, the singleton that controls that is a one stop shop for setting up physics, 
-        # spawning asset primitives, etc.
-        self.pg._world = World(**self.pg._world_settings)
+        # Initialize the simulation
+        self.pg.initialize_world()
         self.world = self.pg.world
 
         # Launch one of the worlds provided by NVIDIA
@@ -86,7 +86,8 @@ class PegasusApp:
         )
 
         # Reset the simulation environment so that all articulations (aka robots) are initialized
-        self.world.reset()
+        SimulationManager.invalidate_physics()
+        SimulationManager.initialize_physics()
 
     def run(self):
         """
@@ -100,8 +101,9 @@ class PegasusApp:
         while simulation_app.is_running():
 
             # Update the UI of the app and perform the physics step
-            self.world.step(render=True)
-        
+            SimulationManager.step()
+            app_utils.update_app()
+
         # Cleanup and stop
         carb.log_warn("PegasusApp Simulation App is closing.")
         self.timeline.stop()

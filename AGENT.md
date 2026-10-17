@@ -499,16 +499,16 @@
 
 ## Progress Tracking
 
-- [ ] Step 0: Update `extension.toml` and project metadata
-- [ ] Step 1: Migrate `PegasusInterface`
-- [ ] Step 2: Migrate `Vehicle` base class
-- [ ] Step 3: Migrate `Multirotor` class
-- [ ] Step 4: Migrate sensors
-- [ ] Step 5: Migrate ROS2 backend and graphs
-- [ ] Step 6: Migrate people/person simulation
-- [ ] Step 7: Migrate example scripts
-- [ ] Step 8: Update `params.py` and asset paths
-- [ ] Step 9: Update `extension.py`
+- [x] Step 0: Update `extension.toml` and project metadata
+- [x] Step 1: Migrate `PegasusInterface`
+- [x] Step 2: Migrate `Vehicle` base class
+- [x] Step 3: Migrate `Multirotor` class
+- [x] Step 4: Migrate sensors
+- [x] Step 5: Migrate ROS2 backend and graphs
+- [x] Step 6: Migrate people/person simulation
+- [x] Step 7: Migrate example scripts
+- [x] Step 8: Update `params.py` and asset paths (no changes needed — uses `nucleus.get_assets_root_path()` dynamically)
+- [x] Step 9: Update `extension.py` (no changes needed — uses only active `omni.*` APIs)
 - [ ] Step 10: Testing and validation
 
 ## Notes for Agents

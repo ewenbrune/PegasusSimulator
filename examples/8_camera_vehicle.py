@@ -2,7 +2,7 @@
 """
 | File: 8_camera_vehicle.py
 | License: BSD-3-Clause. Copyright (c) 2024, Marcelo Jacinto. All rights reserved.
-| Description: This files serves as an example on how to build an app that makes use of the Pegasus API, 
+| Description: This files serves as an example on how to build an app that makes use of the Pegasus API,
 | where the data is send/received through mavlink, the vehicle is controled using mavlink and
 | camera data is sent to ROS2 topics at the same time.
 """
@@ -20,9 +20,10 @@ simulation_app = SimulationApp({"headless": False})
 # The actual script should start here
 # -----------------------------------
 import omni.timeline
-from omni.isaac.core.world import World
-
-from omni.isaac.core.objects import DynamicCuboid
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.experimental.utils import app as app_utils
+from isaacsim.core.experimental.objects import Cube
+from isaacsim.core.experimental.prims import RigidPrim
 import numpy as np
 
 # Import the Pegasus API for simulating drones
@@ -53,24 +54,21 @@ class PegasusApp:
         # Start the Pegasus Interface
         self.pg = PegasusInterface()
 
-        # Acquire the World, .i.e, the singleton that controls that is a one stop shop for setting up physics,
-        # spawning asset primitives, etc.
-        self.pg._world = World(**self.pg._world_settings)
+        # Initialize the simulation
+        self.pg.initialize_world()
         self.world = self.pg.world
 
         # Launch one of the worlds provided by NVIDIA
         self.pg.load_environment(SIMULATION_ENVIRONMENTS["Curved Gridroom"])
 
-        cube_2 = self.world.scene.add(
-            DynamicCuboid(
-                prim_path="/new_cube_2",
-                name="cube_1",
-                position=np.array([-3.0, 0, 2.0]),
-                scale=np.array([1.0, 1.0, 1.0]),
-                size=1.0,
-                color=np.array([255, 0, 0]),
-            )
+        # Create a cube using the new experimental objects API
+        cube = Cube(
+            paths="/new_cube_2",
+            positions=[np.array([-3.0, 0, 2.0])],
+            scales=[np.array([1.0, 1.0, 1.0])],
         )
+        # Add rigid body properties to the cube
+        RigidPrim(paths="/new_cube_2")
 
         # Create the vehicle
         # Try to spawn the selected robot in the world to the specified namespace
@@ -82,10 +80,10 @@ class PegasusApp:
             "px4_dir": "/home/marcelo/PX4-Autopilot"
         })
         config_multirotor.backends = [
-            PX4MavlinkBackend(mavlink_config), 
-            ROS2Backend(vehicle_id=1, 
+            PX4MavlinkBackend(mavlink_config),
+            ROS2Backend(vehicle_id=1,
                         config={
-                            "namespace": 'drone', 
+                            "namespace": 'drone',
                             "pub_sensors": False,
                             "pub_graphical_sensors": True,
                             "pub_state": True,
@@ -93,7 +91,7 @@ class PegasusApp:
 
         # Create a camera and lidar sensors
         config_multirotor.graphical_sensors = [MonocularCamera("camera", config={"update_rate": 60.0})]
-        
+
         Multirotor(
             "/World/quadrotor",
             ROBOTS['Iris'],
@@ -104,7 +102,8 @@ class PegasusApp:
         )
 
         # Reset the simulation environment so that all articulations (aka robots) are initialized
-        self.world.reset()
+        SimulationManager.invalidate_physics()
+        SimulationManager.initialize_physics()
 
         # Auxiliar variable for the timeline callback example
         self.stop_sim = False
@@ -120,7 +119,8 @@ class PegasusApp:
         # The "infinite" loop
         while simulation_app.is_running() and not self.stop_sim:
             # Update the UI of the app and perform the physics step
-            self.world.step(render=True)
+            SimulationManager.step()
+            app_utils.update_app()
 
         # Cleanup and stop
         carb.log_warn("PegasusApp Simulation App is closing.")

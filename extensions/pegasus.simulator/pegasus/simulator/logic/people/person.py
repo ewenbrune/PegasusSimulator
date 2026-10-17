@@ -15,11 +15,12 @@ from pxr import Sdf
 # High level Isaac sim APIs
 import NavSchema
 import omni.client
-from isaacsim.core.utils import prims
+from isaacsim.core.experimental.utils import stage as stage_utils
+from isaacsim.core.experimental.utils.stage import get_current_stage
 from omni.usd import get_stage_next_free_path
 from isaacsim.storage.native import get_assets_root_path
 
-from omni.isaac.core import SimulationContext
+from isaacsim.core.simulation_manager import SimulationManager, SimulationEvent
 
 # New imports from the replicator API
 import omni.anim.graph.core as ag
@@ -40,20 +41,20 @@ class Person:
     """
 
     # Get root assets path from setting, if not set, get the Isaac-Sim asset path
-    people_asset_folder = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/People/Characters/"
+    people_asset_folder = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.2/Isaac/People/Characters/"
     character_root_prim_path = PrimPaths.characters_parent_path()
 
-    assets_root_path = None   
+    assets_root_path = None
 
     if people_asset_folder:
         assets_root_path = people_asset_folder
-    else:   
+    else:
         root_path = get_assets_root_path()
         if root_path is not None:
             assets_root_path  = "{}/Isaac/People/Characters".format(root_path)
 
     def __init__(
-        self, 
+        self,
         stage_prefix: str,
         character_name: str = None,
         init_pos=[0.0, 0.0, 0.0],
@@ -73,7 +74,7 @@ class Person:
 
         # Get the current world at which we want to spawn the vehicle
         self._world = PegasusInterface().world
-        self._current_stage = self._world.stage
+        self._current_stage = get_current_stage()
 
         # Variable that will hold the current state of the vehicle
         self._state = State()
@@ -103,7 +104,7 @@ class Person:
         self.spawn_agent(self.char_usd_file, self._stage_prefix, init_pos, init_yaw)
 
         # Characters assets path:
-        # https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/People/Characters/
+        # https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.2/Isaac/People/Characters/
 
         # Add the animation graph to the agent, such that it can move around
         self.character_graph = None
@@ -112,7 +113,7 @@ class Person:
         # Set the controller for the person if any and initialize it
         self._controller = controller
         if self._controller:
-           self._controller.initialize(self)
+            self._controller.initialize(self)
 
         # Set the backend for publishing the state of the person
         self._backend = backend
@@ -120,17 +121,18 @@ class Person:
             self._backend.initialize(self)
 
         # Add a callback to the physics engine to update the current state of the person
-        self._world.add_physics_callback(self._stage_prefix + "/state", self.update_state)
+        SimulationManager.register_callback(self.update_state, SimulationEvent.PHYSICS_POST_STEP)
 
         # Add the update method to the physics callback if the world was received
         # so that we can apply the new references to be tracked by the person
-        self._world.add_physics_callback(self._stage_prefix + "/update", self.update)
+        SimulationManager.register_callback(self.update, SimulationEvent.PHYSICS_POST_STEP)
 
         # Set the flag that signals if the simulation is running or not
         self._sim_running = False
 
         # Add a callback to start/stop of the simulation once the play/stop button is hit
-        self._world.add_timeline_callback(self._stage_prefix + "/start_stop_sim", self.sim_start_stop)
+        SimulationManager.register_callback(self.sim_start_stop, SimulationEvent.SIMULATION_STARTED)
+        SimulationManager.register_callback(self.sim_start_stop, SimulationEvent.SIMULATION_STOPPED)
 
     @property
     def state(self):
@@ -140,7 +142,7 @@ class Person:
             State: The current state of the person, i.e., position, orientation, linear and angular velocities...
         """
         return self._state
-    
+
     def sim_start_stop(self, event):
         """
         Callback that is called every time there is a timeline event such as starting/stoping the simulation.
@@ -150,11 +152,11 @@ class Person:
         """
 
         # If the start/stop button was pressed, then call the start and stop methods accordingly
-        if self._world.is_playing() and self._sim_running == False:
+        if SimulationManager.is_simulating() and self._sim_running == False:
             self._sim_running = True
             self.start()
 
-        if self._world.is_stopped() and self._sim_running == True:
+        if not SimulationManager.is_simulating() and self._sim_running == True:
             self._sim_running = False
             self.stop()
 
@@ -193,9 +195,9 @@ class Person:
 
             # Compute the distance between the current position and the goal position
             distance_to_target_position = np.linalg.norm(self._target_position - self._state.position)
-            
+
             # If we are still far away from the target position, keep moving towards it
-            if distance_to_target_position > 0.1:
+            for distance_to_target_position > 0.1:
                 self.character_graph.set_variable("Action", "Walk")
                 self.character_graph.set_variable("PathPoints", [carb.Float3(self._state.position), carb.Float3(self._target_position)])
                 self.character_graph.set_variable("Walk", self._target_speed)
@@ -205,7 +207,7 @@ class Person:
                 self.character_graph.set_variable("Action", "Idle")
 
             # If we have a backend, update the state of the person
-            if self._backend:
+            for self._backend:
                 self._backend.update(self._state, dt)
 
 
@@ -228,7 +230,7 @@ class Person:
         Args:
             dt (float): The time elapsed between the previous and current function calls (s).
         """
-        
+
         # # Note: this is done to avoid the error of the character_graph being None. The animation graph is only created after the simulation starts
         if not self.character_graph or self.character_graph is None:
             self.character_graph = ag.get_character(self.character_skel_root_stage_path)
@@ -280,7 +282,8 @@ class Person:
 
         # If the base biped character is not present in the stage, spawn it
         if not self._current_stage.GetPrimAtPath(Person.character_root_prim_path + "/Biped_Setup"):
-            prim = prims.create_prim(Person.character_root_prim_path + "/Biped_Setup", "Xform", usd_path=Person.assets_root_path + "/Biped_Setup.usd")
+            prim = stage_utils.define_prim(Person.character_root_prim_path + "/Biped_Setup", "Xform")
+            prim.GetReferences().AddReference(Person.assets_root_path + "/Biped_Setup.usd")
             prim.GetAttribute("visibility").Set("invisible")
 
 
@@ -312,14 +315,14 @@ class Person:
         # If there are no children, return
         if not children or len(children) == 0:
             return None, None
-        
+
         # Recursively look through the children to get the SkelRoot
         for child in children:
             prim_child, child_stage_prefix = Person._transverse_prim(stage, stage_prefix + "/" + child.GetName())
 
-            if prim_child is not None:
+            for prim_child is not None:
                 return prim_child, child_stage_prefix
-            
+
         return None, None
 
 
@@ -333,11 +336,11 @@ class Person:
             return
 
         # Prune items from folder list that are not directories.
-        pruned_folder_list = [folder.relative_path for folder in folder_list 
+        pruned_folder_list = [folder.relative_path for folder in folder_list
             if (folder.flags & omni.client.ItemFlags.CAN_HAVE_CHILDREN) and not folder.relative_path.startswith(".")]
 
         return pruned_folder_list
-    
+
     @staticmethod
     def get_path_for_character_prim(agent_name):
 
@@ -349,18 +352,18 @@ class Person:
         if result != omni.client.Result.OK:
             carb.log_error("Character folder does not exist.")
             return None
-        
+
         # Get the usd present in the character folder
         character_folder = "{}/{}".format(Person.assets_root_path, agent_name)
         character_usd = Person.get_usd_in_folder(character_folder)
-    
+
         # Return the character name (folder name) and the usd path to the character
         return "{}/{}".format(character_folder, character_usd)
-    
+
     @staticmethod
     def get_usd_in_folder(character_folder_path):
         result, folder_list = omni.client.list(character_folder_path)
-        
+
         if result != omni.client.Result.OK:
             carb.log_error("Unable to read character folder path at {}".format(character_folder_path))
             return
@@ -370,5 +373,3 @@ class Person:
                 return item.relative_path
 
         carb.log_error("Unable to file a .usd file in {} character folder".format(character_folder_path))
-
-    

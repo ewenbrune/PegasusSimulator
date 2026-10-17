@@ -6,11 +6,10 @@ __all__ = ["ROS2CameraGraph"]
 
 import carb
 
-from isaacsim.core.utils import stage
+from isaacsim.core.experimental.utils import stage
+from isaacsim.core.experimental.utils.stage import get_current_stage
 import omni.graph.core as og
-from isaacsim.core.utils.prims import is_prim_path_valid
-from isaacsim.core.utils.prims import set_targets
-from omni.isaac.sensor import Camera
+from isaacsim.sensors.experimental.rtx import CameraSensor
 
 from pegasus.simulator.logic.graphs import Graph
 from pegasus.simulator.logic.vehicles import Vehicle
@@ -78,20 +77,21 @@ class ROS2CameraGraph(Graph):
         if self._camera_prim_path[0] != '/':
             self._camera_prim_path = f"{vehicle.prim_path}/{self._camera_prim_path}"
 
-        # Create the camera object attached to the vehicle
-        self.camera = Camera(
-            prim_path=self._camera_prim_path,
-            position=np.array([0.30, 0.0, 0.0]),
-            frequency=30.0,
-            resolution=self._resolution,
-            orientation=Rotation.from_euler("ZYX", [0.0, 0.0, 0.0], degrees=True).as_quat()
+        # Create the camera sensor attached to the vehicle using the new experimental RTX API
+        self.camera = CameraSensor(
+            path=self._camera_prim_path,
+            resolution=(self._resolution[1], self._resolution[0]),
+            annotators=["rgb"],
         )
 
-        # Initialize the camera sensor
-        self.camera.initialize()
+        # Set the camera position and orientation
+        self.camera.authoring_object.set_local_poses(
+            translations=[np.array([0.30, 0.0, 0.0])],
+            orientations=[Rotation.from_euler("ZYX", [0.0, 0.0, 0.0], degrees=True).as_quat().tolist()]
+        )
 
         # Create camera prism
-        if not is_prim_path_valid(self._camera_prim_path):
+        if not get_current_stage().GetPrimAtPath(self._camera_prim_path).IsValid():
             carb.log_error(f"Cannot create ROS2 Camera graph, the camera prim path \"{self._camera_prim_path}\" is not valid")
             return
 
@@ -172,7 +172,7 @@ class ROS2CameraGraph(Graph):
 
             valid_camera_type = True
 
-        # Create the CameraInfo topic if requested (now in Isaac 5.1.0 it uses an independent node)
+        # Create the CameraInfo topic if requested
         for camera_type in self._types:
             if not camera_type in ["camera_info"]:
                 continue
@@ -194,7 +194,6 @@ class ROS2CameraGraph(Graph):
                 ("get_render_product.outputs:renderProductPath", f"{camera_helper_name}.inputs:renderProductPath")
             ]
 
-
             valid_camera_type = True
 
         if not valid_camera_type:
@@ -209,8 +208,8 @@ class ROS2CameraGraph(Graph):
         )
 
         # Connect camera to the graphs
-        set_targets(
-            prim=stage.get_current_stage().GetPrimAtPath(f"{graph_path}/set_camera"),
+        og.Controller.set_targets(
+            prim=get_current_stage().GetPrimAtPath(f"{graph_path}/set_camera"),
             attribute="inputs:cameraPrim",
             target_prim_paths=[self._camera_prim_path]
         )

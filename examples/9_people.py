@@ -20,8 +20,9 @@ simulation_app = SimulationApp({"headless": False})
 # The actual script should start here
 # -----------------------------------
 import omni.timeline
-from omni.isaac.core.world import World
-from isaacsim.core.utils.extensions import enable_extension
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.experimental.utils import app as app_utils
+from isaacsim.core.experimental.utils.app import enable_extension
 
 # Enable/disable ROS bridge extensions to keep only ROS2 Bridge
 enable_extension("isaacsim.ros2.bridge")
@@ -62,15 +63,15 @@ class CirclePersonController(PersonController):
         self._radius = 5.0
         self.gamma = 0.0
         self.gamma_dot = 0.3
-        
+
     def update(self, dt: float):
 
         # Update the reference position for the person to track
         self.gamma += self.gamma_dot * dt
-        
+
         # Set the target position for the person to track
         self._person.update_target_position([self._radius * np.cos(self.gamma), self._radius * np.sin(self.gamma), 0.0])
-        
+
 
 # Auxiliary scipy and numpy modules
 from scipy.spatial.transform import Rotation
@@ -94,9 +95,8 @@ class PegasusApp:
         # Start the Pegasus Interface
         self.pg = PegasusInterface()
 
-        # Acquire the World, .i.e, the singleton that controls that is a one stop shop for setting up physics,
-        # spawning asset primitives, etc.
-        self.pg._world = World(**self.pg._world_settings)
+        # Initialize the simulation
+        self.pg.initialize_world()
         self.world = self.pg.world
 
         # Launch one of the worlds provided by NVIDIA
@@ -111,7 +111,7 @@ class PegasusApp:
         # Create the controller to make on person walk around in circles
         person_controller = CirclePersonController()
         p1 = Person("person1", "original_male_adult_construction_05", init_pos=[3.0, 0.0, 0.0], init_yaw=1.0, controller=person_controller)
-        
+
         # Create a person without setting up a controller, and just setting a manual target position for it to track
         p2 = Person("person2", "original_female_adult_business_02", init_pos=[2.0, 0.0, 0.0])
         p2.update_target_position([10.0, 0.0, 0.0], 1.0)
@@ -126,17 +126,17 @@ class PegasusApp:
 
         config_multirotor.backends = [
             PX4MavlinkBackend(mavlink_config),
-            ROS2Backend(vehicle_id=1, 
+            ROS2Backend(vehicle_id=1,
                 config={
-                    "namespace": 'drone', 
+                    "namespace": 'drone',
                     "pub_sensors": False,
                     "pub_graphical_sensors": True,
                     "pub_state": True,
                     "pub_tf": False,
                     "sub_control": False,})]
-        
+
         config_multirotor.graphical_sensors = [MonocularCamera("camera", config={"update_rate": 60.0})]
-        
+
         Multirotor(
             "/World/quadrotor",
             ROBOTS['Pegasus'],
@@ -150,7 +150,8 @@ class PegasusApp:
         self.pg.set_viewport_camera([5.0, 9.0, 6.5], [0.0, 0.0, 0.0])
 
         # Reset the simulation environment so that all articulations (aka robots) are initialized
-        self.world.reset()
+        SimulationManager.invalidate_physics()
+        SimulationManager.initialize_physics()
 
         # Auxiliar variable for the timeline callback example
         self.stop_sim = False
@@ -166,7 +167,8 @@ class PegasusApp:
         # The "infinite" loop
         while simulation_app.is_running() and not self.stop_sim:
             # Update the UI of the app and perform the physics step
-            self.world.step(render=True)
+            SimulationManager.step()
+            app_utils.update_app()
 
         # Cleanup and stop
         carb.log_warn("PegasusApp Simulation App is closing.")

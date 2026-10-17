@@ -3,7 +3,7 @@
 | File: python_control_backend.py
 | Author: Marcelo Jacinto and Joao Pinto (marcelo.jacinto@tecnico.ulisboa.pt, joao.s.pinto@tecnico.ulisboa.pt)
 | License: BSD-3-Clause. Copyright (c) 2023, Marcelo Jacinto. All rights reserved.
-| Description: This files serves as an example on how to use the control backends API to create a custom controller 
+| Description: This files serves as an example on how to use the control backends API to create a custom controller
 for the vehicle from scratch and use it to perform a simulation, without using PX4 nor ROS.
 """
 
@@ -20,10 +20,12 @@ simulation_app = SimulationApp({"headless": False})
 # The actual script should start here
 # -----------------------------------
 import omni.timeline
-from omni.isaac.core.world import World
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.experimental.utils import app as app_utils
+from isaacsim.core.experimental.utils import stage as stage_utils
 
 # Used for adding extra lights to the environment
-import isaacsim.core.utils.prims as prim_utils
+from pxr import UsdGeom
 
 # Import the Pegasus API for simulating drones
 from pegasus.simulator.params import ROBOTS
@@ -62,26 +64,20 @@ class PegasusApp:
         # Start the Pegasus Interface
         self.pg = PegasusInterface()
 
-        # Acquire the World, .i.e, the singleton that controls that is a one stop shop for setting up physics, 
-        # spawning asset primitives, etc.
-        self.pg._world = World(**self.pg._world_settings)
+        # Initialize the simulation
+        self.pg.initialize_world()
         self.world = self.pg.world
 
         # Add a custom light with a high-definition HDR surround environment of an exhibition hall,
         # instead of the typical ground plane
-        prim_utils.create_prim(
+        stage_utils.define_prim(
             "/World/Light/DomeLight",
             "DomeLight",
-            position=np.array([1.0, 1.0, 1.0]),
-            attributes={
-                "inputs:intensity": 5e3,
-                "inputs:color": (1.0, 1.0, 1.0),
-                "inputs:texture:file": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/NVIDIA/Assets/Skies/Indoor/ZetoCGcom_ExhibitionHall_Interior1.hdr"
-                # Alternative sky: https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/NVIDIA/Assets/Skies/Cloudy/abandoned_parking_4k.hdr
-            }
-
-            
         )
+        light_prim = stage_utils.get_prim_at_path("/World/Light/DomeLight")
+        light_prim.GetAttribute("inputs:intensity").Set(5e3)
+        light_prim.GetAttribute("inputs:color").Set((1.0, 1.0, 1.0))
+        light_prim.GetAttribute("inputs:texture:file").Set("https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/NVIDIA/Assets/Skies/Indoor/ZetoCGcom_ExhibitionHall_Interior1.hdr")
 
         # Get the current directory used to read trajectories and save results
         self.curr_dir = str(Path(os.path.dirname(os.path.realpath(__file__))).resolve())
@@ -139,7 +135,8 @@ class PegasusApp:
         point_list_2 = [(trajectory2[i,1], trajectory2[i,2], trajectory2[i,3]) for i in range(num_samples2)]
         draw.draw_lines_spline(point_list_2, (255/255, 0, 0, 1), 5, False)
 
-        self.world.reset()
+        SimulationManager.invalidate_physics()
+        SimulationManager.initialize_physics()
 
     def run(self):
         """
@@ -153,8 +150,9 @@ class PegasusApp:
         while simulation_app.is_running():
 
             # Update the UI of the app and perform the physics step
-            self.world.step(render=True)
-        
+            SimulationManager.step()
+            app_utils.update_app()
+
         # Cleanup and stop
         carb.log_warn("PegasusApp Simulation App is closing.")
         self.timeline.stop()

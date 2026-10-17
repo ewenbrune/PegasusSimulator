@@ -19,7 +19,10 @@ simulation_app = SimulationApp({"headless": False})
 # The actual script should start here
 # -----------------------------------
 import omni.timeline
-from omni.isaac.core import World
+import omni.kit.app
+from isaacsim.core.simulation_manager import SimulationManager, SimulationEvent
+from isaacsim.core.experimental.utils import app as app_utils
+from isaacsim.core.experimental.objects import GroundPlane
 
 class Template:
     """
@@ -30,28 +33,30 @@ class Template:
         """
         Method that initializes the template App and is used to setup the simulation environment.
         """
-        
+
         # Acquire the timeline that will be used to start/stop the simulation
         self.timeline = omni.timeline.get_timeline_interface()
 
-        # Acquire the World, .i.e, the singleton that controls that is a one stop shop for setting up physics, 
-        # spawning asset primitives, etc.
-        self.world = World()
+        # Initialize the simulation
+        SimulationManager.setup_simulation(dt=1.0/60.0, device="cpu")
 
         # Create a ground plane for the simulation
-        self.world.scene.add_default_ground_plane()
+        ground_plane = GroundPlane(paths="/World/ground_plane")
 
         # Create an example physics callback
-        self.world.add_physics_callback('template_physics_callback', self.physics_callback)
+        SimulationManager.register_callback(self.physics_callback, SimulationEvent.PHYSICS_POST_STEP)
 
         # Create an example render callback
-        self.world.add_render_callback('template_render_callback', self.render_callback)
+        self._render_sub = omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(
+            self.render_callback
+        )
 
         # Create an example timeline callback
-        self.world.add_timeline_callback('template_timeline_callback', self.timeline_callback)
+        SimulationManager.register_callback(self.timeline_callback, SimulationEvent.SIMULATION_STOPPED)
 
         # Reset the simulation environment so that all articulations (aka robots) are initialized
-        self.world.reset()
+        SimulationManager.invalidate_physics()
+        SimulationManager.initialize_physics()
 
         # Auxiliar variable for the timeline callback example
         self.stop_sim = False
@@ -64,22 +69,22 @@ class Template:
         """
         carb.log_info("This is a physics callback. It is called every " + str(dt) + " seconds!")
 
-    def render_callback(self, data):
+    def render_callback(self, event):
         """An example render callback. It will get invoked for every rendered frame.
 
         Args:
-            data: Rendering data.
+            event: Rendering data.
         """
         carb.log_info("This is a render callback. It is called every frame!")
 
-    def timeline_callback(self, timeline_event):
+    def timeline_callback(self, event):
         """An example timeline callback. It will get invoked every time a timeline event occurs. In this example,
         we will check if the event is for a 'simulation stop'. If so, we will attempt to close the app
 
         Args:
-            timeline_event: A timeline event
+            event: A timeline event
         """
-        if self.world.is_stopped():
+        if not SimulationManager.is_simulating():
             self.stop_sim = True
 
     def run(self):
@@ -94,8 +99,9 @@ class Template:
         while simulation_app.is_running() and not self.stop_sim:
 
             # Update the UI of the app and perform the physics step
-            self.world.step(render=True)
-        
+            SimulationManager.step()
+            app_utils.update_app()
+
         # Cleanup and stop
         carb.log_warn("Template Simulation App is closing.")
         self.timeline.stop()

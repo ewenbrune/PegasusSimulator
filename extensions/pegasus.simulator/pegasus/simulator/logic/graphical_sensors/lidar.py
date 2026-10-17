@@ -12,8 +12,9 @@ from pegasus.simulator.logic.interface.pegasus_interface import PegasusInterface
 
 # Imports the python bindings to interact with lidar sensor
 import omni.kit.commands
-from pxr import Gf, UsdGeom  
+from pxr import Gf, UsdGeom
 from omni.usd import get_stage_next_free_path
+from isaacsim.core.experimental.utils.stage import get_current_stage
 
 # Auxiliary scipy and numpy modules
 import numpy as np
@@ -34,7 +35,7 @@ class Lidar(GraphicalSensor):
         """
 
         # Initialize the Super class "object" attributes
-        super().__init__(sensor_type="Lidar", update_rate=config.get("frequency", 60.0)) 
+        super().__init__(sensor_type="Lidar", update_rate=config.get("frequency", 60.0))
 
         # Setup the name of the camera primitive path
         self._lidar_name = lidar_name
@@ -53,22 +54,22 @@ class Lidar(GraphicalSensor):
         Initialize the Lidar sensor
         """
         super().initialize(vehicle)
-        
+
         # Get the complete stage prefix for the lidar
-        self._stage_prim_path = get_stage_next_free_path(PegasusInterface().world.stage, self._vehicle.prim_path + "/body/" + self._lidar_name, False)
+        self._stage_prim_path = get_stage_next_free_path(get_current_stage(), self._vehicle.prim_path + "/body/" + self._lidar_name, False)
 
         # Get the camera name that was actually created (and update the camera name)
         self._lidar_name = self._stage_prim_path.rpartition("/")[-1]
-        
+
         _, self._sensor = omni.kit.commands.execute(
             "IsaacSensorCreateRtxLidar",
             path=self._lidar_name,
             parent=self._vehicle.prim_path + "/body",
-            config= self._sensor_configuration["sensor_configuration"],
+            config=self._sensor_configuration["sensor_configuration"],
             translation=(self._position[0], self._position[1], self._position[2]),
             orientation=Gf.Quatd(self._orientation[3], self._orientation[0], self._orientation[1], self._orientation[2])
         )
-    
+
     def start(self):
 
         # If show_render is True, then create a render product for the lidar in the Isaac Sim environment
@@ -84,7 +85,7 @@ class Lidar(GraphicalSensor):
         (dict) The 'state' of the sensor, i.e. the data produced by the sensor at any given point in time
         """
         return self._state
-    
+
     @GraphicalSensor.update_at_rate
     def update(self, state: State, dt: float):
         """Method that gets the data from the lidar and returns it as a dictionary.
