@@ -59,7 +59,7 @@ class PatchIsaacSimKitApp(egg_info):
         with open(file_path, "w") as f:
             f.writelines(lines)
 
-
+    
     def run(self):
         egg_info.run(self)
 
@@ -85,15 +85,15 @@ setup(
     maintainer="Marcelo Jacinto",
     maintainer_email="marcelo.jacinto@tecnico.ulisboa.pt",
     url="https://github.com/PegasusSimulator/PegasusSimulator/tree/main/extensions/pegasus.simulator",
-    version="5.1.0",
+    version="6.2.0",
     description="Extension providing the main framework interfaces for simulating aerial vehicles using PX4, Python or ROS 2 as a backend",
     keywords=["drone", "quadrotor", "multirotor", "UAV", "px4", "sitl", "robotics"],
     license="BSD-3-Clause",
     include_package_data=True,
-    python_requires=">=3.7",
+    python_requires=">=3.12",
     install_requires=INSTALL_REQUIRES,
     cmdclass={'egg_info': PatchIsaacSimKitApp},
     packages=["pegasus.simulator"],
-    classifiers=["Natural Language :: English", "Programming Language :: Python :: 3.7"],
+    classifiers=["Natural Language :: English", "Programming Language :: Python :: 3.12"],
     zip_safe=False,
 )
